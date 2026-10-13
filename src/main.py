@@ -8,8 +8,27 @@ import pandas as pd
 import os
 import webbrowser
 import openpyxl as xl
-file = r'C:\Users\samuel.matos\Documents\OneDrive - ERM\Samuel\Braskem BA\3 campanha\2.Plano de Amostragem - Parâmetros químicos.xlsx'
-#file = r'C:\Users\samuel.matos\Documents\OneDrive - ERM\Samuel\Braskem BA\Escopo amostral PGRH Braskem 2022_conferencia.xlsx'
+from src.config import env_mapping, env_path, env_text
+
+file = env_path('MAIN_PLAN_FILE')
+folder = env_path('MAIN_EQUIS_DIR')
+folder_checkl = env_path('MAIN_CHECKLIST_DIR')
+plan_output_file = env_path('MAIN_PLAN_OUTPUT_FILE')
+file_param_ausentes = env_path('MAIN_REPORT_OUTPUT_FILE')
+sites = env_mapping('MAIN_EQUIS_FILES')
+sites_check = env_mapping('MAIN_CHECKLIST_FILES')
+site_rename = env_mapping('MAIN_SITE_RENAME')
+plan_sheet_filter = env_text('MAIN_PLAN_SHEET_FILTER')
+plan_columns = {
+    env_text('MAIN_GROUP_COLUMN'): 'Grupos',
+    env_text('MAIN_POINTS_COLUMN'): 'Poços',
+    env_text('MAIN_PARAMETERS_COLUMN'): 'Parâmetros',
+}
+sample_sheet = env_text('MAIN_SAMPLE_SHEET')
+smp_sheet = env_text('MAIN_SMP_SHEET')
+test_sheet = env_text('MAIN_TEST_SHEET')
+result_sheet = env_text('MAIN_RESULT_SHEET')
+batch_sheet = env_text('MAIN_BATCH_SHEET')
 
 
 fileobj = pd.ExcelFile(file)
@@ -18,9 +37,10 @@ grupo_array=[]
 ponto_array=[]
 aba_array=[]
 for aba in fileobj.sheet_names:
-    if '_PA' in aba:
+    if plan_sheet_filter in aba:
         df = pd.read_excel(fileobj, aba) 
         df = df.rename(columns = {'Parâmetros ':'Parâmetros'})
+        df = df.rename(columns=plan_columns)
         for idx, row in df.iterrows():
             grupo = df.loc[idx, 'Grupos'].strip()
             #site_pa = df.loc[idx, 'Site'].strip()
@@ -57,66 +77,18 @@ data.loc[data['Parâmetro'].eq('Cobalto "Total'), 'Parâmetro'] = 'Cobalto Total
 
 
 
-site_rename = {'BRASKEM PE 1 BA':'PE-1_PA', 
-                             'BRASKEM PE 2 BA':'PE-2_PA',
-                             'BRASKEM PE 3 BA':'PE-3_PA', 
-                             'BRASKEM PVC 1 BA':'PVC_PA', 
-                             'BRASKEM UNIB UA 3 BA':'UA-3_PA',
-                             'BRASKEM UNIB UA 4 BA':'UA-4_PA', 
-                             'BRASKEM Q1 BA':'Q1_PA',
-                             'TECNOR':'Tecnor_PA'}
 for i in site_rename.keys():
     data.loc[data.Site.eq(i), 'Site'] = site_rename[i]
-sites = {'PVC_PA':'EQuIS 4-File-BRASKEM-PVC-039.xlsx', 
-         'Tecnor_PA':'EQuIS 4-File-BRASKEM-TECNOR-126.xlsx',
-         'Q1_PA':'EQuIS 4-File-BRASKEM-Q1-047.xlsx',
-         'PE-1_PA':'EQuIS 4-File-BRASKEM-PE1-083.xlsx',
-         'PE-2_PA':'EQuIS 4-File-BRASKEM-PE2-038.xlsx', 
-         'PE-3_PA':'EQuIS 4-File-BRASKEM-PE3-037.xlsx',
-         'UA-3_PA':'EQuIS 4-File-BRASKEM-UA3-057.xlsx', 
-         'UA-4_PA':'EQuIS 4-File-BRASKEM-UA4-043.xlsx'}
 #segunda campanha
 input("""Lembre de considerar a campanha!
       ***
       """)
       
-sites = {#'PVC_PA':'EQuIS 4-File-BRASKEM-PVC-039.xlsx', #
-         #'Tecnor_PA':'EQuIS 4-File-TECNOR-126.xlsx',#
-         #'Q1_PA':'EQuIS 4-File-BRASKEM-Q1-047.xlsx',
-         'PE-1_PA':'EQuIS 4-File-BRASKEM-PE1-083.xlsx',#
-         'PE-2_PA':'EQuIS 4-File-BRASKEM-PE2-038.xlsx', #
-         #'PE-3_PA':'EQuIS 4-File-BRASKEM-PE3-037.xlsx',
-         #'UA-3_PA':'EQuIS 4-File-BRASKEM-UA3-057.xlsx', #
-         #'UA-4_PA':'EQuIS 4-File-BRASKEM-UA4-043.xlsx'
-         } 
-folder = r'C:\Users\samuel.matos\Documents\OneDrive - ERM\Samuel\Braskem BA\3 campanha'
 data = data[data.Site.isin(sites.keys())]
-data.to_excel("Plano de Amostragem Braskem BA - 3 campanha.xlsx", index = False)
+data.to_excel(plan_output_file, index = False)
 """
 CHECKLIST
 """
-sites_check = { #primeira campanha
- 'PE-1_PA':'BRASKEM_PE1_083_CHECK_LIST_2023T1.xlsx',
- 'PE-2_PA':'BRASKEM_PE2_038_CHECK_LIST_2023T1.xlsx',
- #'PE-3_PA':'BRASKEM_PE3_037_CHECK_LIST_2022T1.xlsx',
- #'PVC_PA':'BRASKEM_PVC_039_CHECK_LIST_2022T1.xlsx',
- #'Q1_PA':'BRASKEM_Q1_047_CHECKLIST_2022T1.xlsx',
- #'Tecnor_PA':'BRASKEM_TECNOR_126_CHECK_LIST_2022T1.xlsm',
- #'UA-3_PA':'BRASKEM_UA3_057_CHECKLIST_2022T1.xlsm',
- #'UA-4_PA':'BRASKEM_UA4_043_CHECKLIST_2022T1.xlsx'
- }
-
-"""
-sites_check = { #segunda campanha
- 'PE-1_PA':'BRASKEM_PE1_083_CHECKLIST_2022T2.xlsm',
- 'PE-3_PA':'BRASKEM_PE3_037_CHECKLIST_2022T2.xlsm',
- 'Q1_PA':'BRASKEM_Q1_047_CHECKLIST_2022T2.xlsm',
- 'Tecnor_PA':'BRASKEM_TECNOR_126_CHECKLIST_2022T2.xlsm',
- 'UA-3_PA':'BRASKEM_UA3_057_CHECKLIST_2022T2.xlsm',
- 'UA-4_PA':'BRASKEM_UA4_043_CHECKLIST_2022T2.xlsm'}
-"""
-
-folder_checkl =r'C:\Users\samuel.matos\Documents\OneDrive - ERM\Samuel\Braskem BA\checklist 3 C'
 data_checkl = pd.DataFrame()
 for check_file in os.listdir(folder_checkl):
     checkl = pd.read_excel('\\'.join([folder_checkl, check_file]))
@@ -142,11 +114,11 @@ parametros_ausentes = pd.DataFrame()
 compilado_result = pd.DataFrame()
 
 for site in data.Site.unique():
-    aba_sample = pd.read_excel('\\'.join([folder,sites[site]]),'EFW2FSample')
-    aba_smp = pd.read_excel('\\'.join([folder,sites[site]]),'EFW2LabSMP')
-    aba_test = pd.read_excel('\\'.join([folder,sites[site]]),'EFW2LabTST')
-    aba_result = pd.read_excel('\\'.join([folder,sites[site]]),'EFW2LabRES')
-    aba_batch = pd.read_excel('\\'.join([folder,sites[site]]),'EFW2LabBCH')
+    aba_sample = pd.read_excel(os.path.join(folder, sites[site]), sample_sheet)
+    aba_smp = pd.read_excel(os.path.join(folder, sites[site]), smp_sheet)
+    aba_test = pd.read_excel(os.path.join(folder, sites[site]), test_sheet)
+    aba_result = pd.read_excel(os.path.join(folder, sites[site]), result_sheet)
+    aba_batch = pd.read_excel(os.path.join(folder, sites[site]), batch_sheet)
     
     data_site = data[data['Site'].eq(site)]
     pontos_extras = pd.concat([pontos_extras,
@@ -199,7 +171,6 @@ compilado_result['key'] = compilado_result['sys_loc_code'] + "_" + compilado_res
 nao_amostrado_sem_just = amostrado[~amostrado.key.isin(compilado_result.key.tolist())]
 
 
-file_param_ausentes = "Relação de parâmetros Braskem BA - 2023T1.xlsx"
 with pd.ExcelWriter(file_param_ausentes) as arq:
     pd.DataFrame(data = {'Resumo':["""Pontos importantes: Ao em Análises ausentes Ponto no EDD? = Não, você conseguirá ver os pontos que não foram encontrados no EDD.
                                    Isto pode ocorrer devido ao nome do ponto estar escrito errado ou de fato o ponto não veio no EDD. Após ter utilizado o filtro acima, 
@@ -236,9 +207,6 @@ webbrowser.open(os.getcwd())
     
     
     
-
-
-
 
 
 

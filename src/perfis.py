@@ -9,9 +9,17 @@ import os, pyshorteners
 import math, webbrowser
 from time import sleep, time
 from datetime import datetime
+from src.config import env_choice, env_path, env_seconds, env_text, mapped_file
 
 start = time()
-folder = r'C:\Users\samuel.matos\OneDrive - ERM\Samuel\Braskem BA\Perfis' +'\\'
+folder = env_path('PERFIS_INPUT_DIR')
+folder_outputs = env_path('PERFIS_OUTPUT_DIR')
+site = env_choice('PERFIS_SITE', ('BA', 'AL', 'Tupy'))
+retry_wait_1 = env_seconds('LINK_RETRY_WAIT_1')
+retry_wait_2 = env_seconds('LINK_RETRY_WAIT_2')
+date = str(datetime.now().date())
+qc_file = os.path.join(folder_outputs, env_text('PERFIS_QC_FILE', site=site, date=date))
+output_file = os.path.join(folder_outputs, env_text('PERFIS_OUTPUT_FILE', site=site, date=date))
           
 os.listdir(folder)
 #type_tiny = pyshorteners.Shortener()
@@ -19,23 +27,24 @@ os.listdir(folder)
 
 #IMPORTANTE OBSERVAR A PARTE DO NOME DO SITE
 
-
-
-site = 'AL'
-if site == 'BA':
-    gis = pd.read_excel(folder +'BRASKEM_BA_PerfisConstrutivos_Controle.xlsx')
-elif site == 'AL':
-    gis = pd.read_excel(folder +'BRASKEM_AL_PerfisConstrutivos_Controle.xlsx')
-elif site == 'Tupy':
-    #nome do arquivo controle
-    arquivo = 'TupyMaua_PerfisConstrutivos_Controle.xlsx'
-    gis = pd.read_excel(folder +arquivo)
+gis = pd.read_excel(os.path.join(folder, mapped_file('PERFIS_CONTROL_FILES', site)))
+gis = gis.rename(columns={
+    env_text('PERFIS_FILE_COLUMN'): 'File_Name',
+    env_text('PERFIS_LOCATION_COLUMN'): 'SYS_LOC_CODE',
+    env_text('PERFIS_SITE_COLUMN'): 'Site',
+    env_text('PERFIS_GLOBAL_ID_COLUMN'): 'GlobalID',
+    env_text('PERFIS_OBJECT_ID_COLUMN'): 'ObjectID',
+})
 #colunas da tabela
 ['GlobalID *', 'OBJECTID', 'SYS_LOC_CODE', 'File_Name', 'Site',
        'Perfil_Disponivel', 'LinkPerfilConstrutivo']
 if 'File_Name' not in gis.columns:
     gis['File_Name'] = gis['SYS_LOC_CODE']
-links = pd.read_excel(folder + f'perfil {site}.xlsx')
+links = pd.read_excel(os.path.join(folder, env_text('PERFIS_LINKS_FILE', site=site)))
+links = links.rename(columns={
+    env_text('PERFIS_LINK_NAME_COLUMN'): 'Name',
+    env_text('PERFIS_LINK_PATH_COLUMN'): 'Folder Path',
+})
 #colunas da tabela
 ['Name', 'Extension', 'Date accessed', 'Date modified', 'Date created',
        'Folder Path']
@@ -63,32 +72,29 @@ gis['key'] = gis['Site']  + gis['File_Name']
 gis = pd.merge(gis, links[['Name', 'Folder Path','File_Name','key','site']], 'left', 'key')
 
 gis[gis.File_Name_y.isnull()][['GlobalID', 'ObjectID', 'SYS_LOC_CODE', 'File_Name_x', 'Site']
-                              ].to_excel(folder+'Pontos da planilha de controle não encontrados no sharepoint.xlsx', index=False)
-webbrowser.open(folder+'Pontos da planilha de controle não encontrados no sharepoint.xlsx')
+                              ].to_excel(qc_file, index=False)
+webbrowser.open(qc_file)
 gis['link antigo'] = gis['Folder Path'] + gis['Name']
 gis['link'] = None
 go = True
 
 if gis[~gis['link antigo'].isnull()].empty:
     print('nenhuma correspondência de entre as duas tabelas, não possível fazer o merge')
-    oi
     
 for idx, row in gis[(~gis['link antigo'].isnull()) & (gis['link'].isnull())].iterrows():
     type_tiny = pyshorteners.Shortener()
     if type(gis.loc[idx, 'link']) != str:
            try: gis.loc[idx, 'link'] = type_tiny.tinyurl.short(gis.loc[idx,'link antigo'])
            except:
-               sleep(5)
+               sleep(retry_wait_1)
                try: gis.loc[idx, 'link'] = type_tiny.tinyurl.short(gis.loc[idx,'link antigo'])
                except:
-                   sleep(10)
+                   sleep(retry_wait_2)
                    gis.loc[idx, 'link'] = type_tiny.tinyurl.short(gis.loc[idx,'link antigo'])
                    
 
 gis.loc[~gis['link'].isnull(), 'link'] = '<a href="' + gis['link'] + '">Disponível</a>'
 
-gis.to_excel(folder + f"Links encurtados {site +'-' +str(datetime.now().date())}.xlsx", index = False)
-webbrowser.open(folder + f"Links encurtados {site +'-' +str(datetime.now().date())}.xlsx")
+gis.to_excel(output_file, index = False)
+webbrowser.open(output_file)
 print(time()-start)
-
-
