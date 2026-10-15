@@ -1,183 +1,112 @@
-# `main.py` — conferir o Plano de Amostragem contra os resultados
+# `main.py` — conferência do plano de amostragem
 
-## Em poucas palavras
+## Finalidade
 
-Imagine três listas diferentes:
+O módulo `src.main` normaliza um Plano de Amostragem (PA) e compara os pontos e parâmetros previstos com checklists de campo e resultados exportados do EQuIS/EDD. O relatório destaca diferenças para análise da equipe; não altera as fontes nem determina automaticamente a causa de uma divergência.
 
-1. o que **deveria** ser coletado/analisado (Plano de Amostragem);
-2. o que a equipe registrou no **checklist**;
-3. o que chegou nos arquivos de **resultado do laboratório** (EQuIS/EDD).
+O script é específico ao formato configurado para a campanha. Revise os caminhos, arquivos, abas e cabeçalhos antes de cada execução.
 
-Este script põe essas listas lado a lado e cria um Excel para ajudar a encontrar diferenças. Ele não coleta dados nem corrige as fontes.
+## Fontes de entrada
 
-Os caminhos, sites ativos, nomes de arquivos, abas EQuIS e cabeçalhos do PA são configurados no grupo `MAIN_` do [`.env`](../.env). Os valores iniciais representam Braskem BA/terceira campanha. O layout dos checklists e o esquema interno do EQuIS continuam específicos do código.
+Todas as entradas são arquivos Excel preparados previamente.
 
-## Entradas que o script espera
+### Plano de amostragem
 
-1. **Planilha de plano de amostragem** — caminho definido na variável `file`. O script percorre todas as abas cujo nome contém `_PA`. Em cada aba espera colunas equivalentes a `Grupos`, `Poços` e `Parâmetros` (aceita também o cabeçalho `Parâmetros ` com espaço no final, que renomeia).
-2. **Checklists** — todos os arquivos encontrados na pasta `folder_checkl`. O código espera um layout determinado: usa a linha de índice 3 do DataFrame como cabeçalho (com a leitura padrão do pandas, normalmente corresponde à quinta linha física do Excel) e colunas como `Poço`, `Data`, `Poço foi amostrado?` e `Status do Poço`.
-3. **Exportações EQuIS** — arquivos Excel mapeados no dicionário `sites`, dentro de `folder`. São lidas as abas `EFW2FSample`, `EFW2LabSMP`, `EFW2LabTST`, `EFW2LabRES` e `EFW2LabBCH`.
+- Caminho: `MAIN_PLAN_FILE`.
+- O script processa somente abas cujo nome contém o valor de `MAIN_PLAN_SHEET_FILTER` (padrão: `_PA`).
+- Em cada aba são esperadas colunas equivalentes às configuradas em `MAIN_GROUP_COLUMN`, `MAIN_POINTS_COLUMN` e `MAIN_PARAMETERS_COLUMN`. Os nomes internos utilizados pelo processamento são `Grupos`, `Poços` e `Parâmetros`.
+- A grafia histórica `Parâmetros `, com espaço final, também é tratada.
+- A célula de pontos e a de parâmetros podem conter listas separadas por vírgulas; cada combinação ponto/parâmetro vira um registro.
 
-Os caminhos atuais são configuráveis no `.env` e, quando relativos, partem da raiz do projeto. As entradas de amostragem precisam ser fornecidas; nomes válidos no `.env` não garantem que os arquivos existam.
+### Exportações EQuIS/EDD
 
-## Um exemplo antes e depois
+- Diretório: `MAIN_EQUIS_DIR`.
+- Mapa de arquivos por site: `MAIN_EQUIS_FILES`, como objeto JSON.
+- Abas configuráveis: `MAIN_SAMPLE_SHEET`, `MAIN_SMP_SHEET`, `MAIN_TEST_SHEET`, `MAIN_RESULT_SHEET` e `MAIN_BATCH_SHEET`.
+- A comparação usa principalmente amostras e resultados. O script também tenta ler as abas SMP, TST e BCH indicadas na configuração; elas precisam existir mesmo quando não são usadas diretamente na consolidação do relatório.
 
-Imagine uma linha da aba `_PA` assim:
+### Checklists de campo
 
-| Grupos | Poços | Parâmetros |
-|---|---|---|
-| Metais | POCO-01, POCO-02 | Arsênio, Chumbo |
+- Diretório: `MAIN_CHECKLIST_DIR`.
+- `MAIN_CHECKLIST_FILES` associa os nomes exatos dos arquivos aos sites normalizados.
+- O formato esperado inclui cabeçalhos como `Poço`, `Data`, `Poço foi amostrado?` e `Status do Poço`. O script usa a linha configurada implicitamente pelo layout atual do arquivo; não é uma importação genérica de checklists.
 
-O programa transforma essa linha em quatro registros:
+## Configuração
 
-| Site (aba de origem) | Ponto | Grupo | Parâmetro |
-|---|---|---|---|
-| nome da aba | POCO-01 | Metais | Arsênio |
-| nome da aba | POCO-01 | Metais | Chumbo |
-| nome da aba | POCO-02 | Metais | Arsênio |
-| nome da aba | POCO-02 | Metais | Chumbo |
+As variáveis são carregadas de `.env` pela raiz do projeto. Caminhos relativos também partem da raiz.
 
-Isso é necessário porque comparar fica mais simples quando cada linha representa **um ponto e um parâmetro**, em vez de várias listas separadas por vírgulas dentro de uma célula.
-
-Depois, o script procura esses pontos e parâmetros nas outras fontes. Se o PA diz que POCO-01 deve ter Arsênio, mas não aparece resultado desse parâmetro para a amostra daquele ponto, essa combinação pode aparecer em `Análises ausentes`.
-
-## Como ler algumas partes do Python
-
-- `import pandas as pd`: carrega pandas e usa o apelido curto `pd`.
-- `pd.read_excel(...)`: lê uma planilha Excel e a transforma em uma tabela para o programa.
-- `df.loc[...]`: acessa linhas/colunas da tabela.
-- `for ... in ...`: repete o bloco para cada aba, linha, ponto ou parâmetro.
-- `data[...]`: em vários lugares, filtra a tabela para manter só as linhas que atendem a uma condição.
-- `pd.concat([...])`: empilha linhas de tabelas, como juntar várias listas uma embaixo da outra.
-- `pd.merge(...)`: combina tabelas que compartilham um identificador, como uma busca de correspondência.
-- `to_excel(...)`: grava uma tabela em um arquivo Excel.
-
-Os nomes `df`, `data`, `aba_sample` e `aba_result` são variáveis: cada uma guarda temporariamente uma tabela ou um resultado intermediário. A palavra “aba” nos nomes representa uma planilha/worksheet dentro de um arquivo Excel.
-
-## Etapas do processamento
-
-### 1. Lê e expande o plano
-
-O script abre o Excel e seleciona as abas com `_PA` no nome. Para cada linha:
-
-- obtém o grupo em `Grupos`;
-- separa a lista de poços de `Poços` por vírgula, removendo espaços, quebras de linha e aspas;
-- separa a lista de parâmetros de `Parâmetros` por vírgula;
-- cria um registro para cada combinação de poço e parâmetro.
-
-Por exemplo, uma linha que contenha dois poços e três parâmetros é expandida em até seis linhas na tabela resultante: cada poço é combinado com cada parâmetro. O grupo e o nome da aba de origem acompanham cada linha.
-
-O nome da aba é guardado na coluna `Site`. Mais adiante, o script usa essa informação para decidir qual arquivo EQuIS consultar.
-
-### 2. Padroniza nomes
-
-Há substituições textuais para corrigir nomes conhecidos de parâmetros, incluindo variações de pontuação, espaços e erros de digitação. Algumas vírgulas internas de nomes químicos (como `1,2-...`) são trocadas temporariamente por pontos para que a divisão por vírgulas não separe partes de um mesmo nome; depois os pontos são convertidos de volta em vírgulas.
-
-Também são aplicadas correções finais a alguns nomes de parâmetros e um mapeamento dos nomes das abas/sites para rótulos como `PE-1_PA` e `PE-2_PA`.
-
-### 3. Seleciona a campanha/sites ativos
-
-O dicionário `sites` é carregado de `MAIN_EQUIS_FILES`. Nos valores iniciais, somente `PE-1_PA` e `PE-2_PA` ficam ativos. A tabela do PA é filtrada para esses sites e salva no caminho `MAIN_PLAN_OUTPUT_FILE`, inicialmente:
-
-`Plano de Amostragem Braskem BA - 3 campanha.xlsx`
-
-O caminho de saída relativo parte da raiz do projeto, não do diretório do terminal.
-
-Antes disso, o script mostra uma pausa interativa (`input`) para lembrar que a campanha deve ser conferida. É necessário responder ao prompt para a execução continuar.
-
-**Para escolher sites:** inclua/remova pares no JSON `MAIN_EQUIS_FILES` e ajuste os checklists correspondentes em `MAIN_CHECKLIST_FILES`. Não precisa editar dicionários no Python.
-
-### 4. Consolida os checklists
-
-O script percorre todos os arquivos da pasta de checklist, tenta ajustar as primeiras colunas vazias e usa a linha de índice 3 do DataFrame como cabeçalho. Em seguida, combina os checklists em uma tabela e tenta associar cada arquivo ao site por meio do dicionário `sites_check`.
-
-O dicionário ativo mapeia nomes de arquivos de PE-1 e PE-2. O mapeamento tem que corresponder exatamente aos nomes encontrados na pasta. Embora o script carregue essa tabela, uma falha nessa etapa pode impedir a geração da planilha final.
-
-### 5. Compara o PA com EQuIS/EDD
-
-Para cada site presente no PA filtrado, são abertas as abas EQuIS mencionadas acima. A comparação examina:
-
-- **Pontos extras**: locais que aparecem nos samples EQuIS, mas não no PA do site;
-- **Pontos ausentes**: pontos previstos no PA que não foram encontrados na aba `EFW2FSample`;
-- **Parâmetros/análises extras**: resultados na aba `EFW2LabRES` que não aparecem no PA;
-- **Parâmetros/análises ausentes**: parâmetros do PA sem resultado no EDD para as amostras do ponto;
-- **Pontos sem amostra**: pontos do PA sem amostra correspondente, identificados como não presentes no EDD;
-- **Não coletado sem justificativa**: pontos indicados como amostrados no checklist, mas sem resultados associados no EDD.
-
-O script também usa a coluna `Status do Poço` do checklist como possível justificativa para pontos marcados como não amostrados. Essa associação exige que os nomes dos sites e dos poços coincidam entre checklist, PA e EQuIS.
-
-Uma forma de pensar nas comparações:
-
-| Pergunta feita pelo script | Resultado provável |
+| Variável | Uso |
 |---|---|
-| “Este ponto existe no plano e na aba de amostras?” | Se não existir no EQuIS, entra em pontos ausentes. |
-| “Este resultado químico estava previsto para este ponto?” | Se não estava, entra em análises extras. |
-| “Este parâmetro previsto aparece nos resultados da amostra?” | Se não aparece, entra em análises ausentes. |
-| “O checklist diz que coletou, mas há resultado no EDD para o ponto?” | Se o checklist diz sim e não há resultado, pode entrar em não coletado sem justificativa. |
+| `MAIN_PLAN_FILE` | Plano de entrada. |
+| `MAIN_EQUIS_DIR` / `MAIN_EQUIS_FILES` | Diretório e mapa dos arquivos EQuIS por site. |
+| `MAIN_CHECKLIST_DIR` / `MAIN_CHECKLIST_FILES` | Diretório e mapa dos checklists por site. |
+| `MAIN_PLAN_SHEET_FILTER` | Texto que identifica abas do PA a processar. |
+| `MAIN_GROUP_COLUMN`, `MAIN_POINTS_COLUMN`, `MAIN_PARAMETERS_COLUMN` | Cabeçalhos de grupo, pontos e parâmetros na planilha do PA. |
+| `MAIN_SITE_RENAME` | Mapeamento de nomes de abas/sites para os identificadores usados na comparação. |
+| `MAIN_SAMPLE_SHEET`, `MAIN_SMP_SHEET`, `MAIN_TEST_SHEET`, `MAIN_RESULT_SHEET`, `MAIN_BATCH_SHEET` | Nomes de abas nas exportações EQuIS. |
+| `MAIN_PLAN_OUTPUT_FILE` | Destino do plano normalizado. |
+| `MAIN_REPORT_OUTPUT_FILE` | Destino do relatório de comparação. |
 
-Essas verificações dependem de identificadores iguais. `POCO-01` e `Poco-01`, por exemplo, podem ser tratados como nomes diferentes pelo código.
+Os caminhos de saída e os diretórios correspondentes precisam ser graváveis. Confira se os sites ativos nos mapas representam a campanha que será analisada; os valores do `.env.example` são apenas uma referência de configuração.
 
-### 6. Gera o relatório
+## Processamento
 
-O caminho `MAIN_REPORT_OUTPUT_FILE` define o relatório, inicialmente `Relação de parâmetros Braskem BA - 2023T1.xlsx` na raiz do projeto. As abas criadas incluem:
+1. Lê as abas do plano que correspondem ao filtro configurado.
+2. Renomeia os cabeçalhos configurados para os nomes internos e separa listas de pontos e parâmetros em registros individuais.
+3. Aplica as correções textuais de nomes existentes no script e normaliza o nome do site por meio de `MAIN_SITE_RENAME`.
+4. Solicita confirmação interativa para lembrar a revisão da campanha.
+5. Filtra o plano para os sites presentes em `MAIN_EQUIS_FILES` e grava o plano normalizado.
+6. Lê e consolida os checklists do diretório configurado.
+7. Para cada site, lê as abas EQuIS selecionadas e compara pontos e parâmetros com o plano e o checklist.
+8. Grava o relatório final no caminho `MAIN_REPORT_OUTPUT_FILE`.
 
-| Aba | Interpretação |
+O nome da aba do plano é inicialmente usado como identificador do site. A correspondência entre esse nome, o mapeamento `MAIN_SITE_RENAME`, as chaves do mapa EQuIS e os arquivos de checklist deve ser consistente.
+
+## Compatibilidade conhecida
+
+Na versão atual do código, uma chamada de gravação do relatório passa o nome da aba de saída de forma posicional para `DataFrame.to_excel`. Com o pandas instalado na validação, isso causa `TypeError` durante a geração do relatório e impede que o fluxo conclua normalmente. A suíte automatizada reproduz o problema. A documentação dos resultados abaixo descreve o formato pretendido do relatório; não representa uma garantia de geração até que a chamada seja corrigida no código.
+
+## Interpretação dos resultados
+
+O relatório pode incluir as seguintes abas:
+
+| Aba/indicador | Interpretação |
 |---|---|
-| `Resumo` | Texto explicativo para quem analisa o relatório. |
-| `Análises extras` | Resultados do EDD não previstos para o ponto no PA. |
-| `Análises ausentes` | Parâmetros esperados no PA sem resultado localizado. |
-| `Pontos extras` / `Pontos ausentes` | Diferenças de pontos entre PA e EQuIS. |
-| `Nomes não encontrados no PA` / `Nomes não encontrados no edd` | Diferenças de nomes de parâmetros entre as fontes. |
-| `Pontos extras geral` / `Pontos ausentes geral` | Comparação agregada dos pontos. |
-| `Parâmetros extras geral` / `Parâmetros ausentes geral` | Comparação agregada dos parâmetros. |
-| `Não coletado sem justificativa` | Amostragens indicadas como feitas no checklist, sem resultado localizado no compilado. |
-| `Compilado EDDs` | Resultados reunidos dos arquivos EQuIS. |
+| `Análises extras` | Resultados do EDD que não foram encontrados entre os parâmetros previstos para o ponto. |
+| `Análises ausentes` | Parâmetros previstos que não foram localizados nos resultados relacionados à amostra/ponto. |
+| `Pontos extras` / `Pontos ausentes` | Diferenças de pontos entre o PA e a fonte EQuIS consultada. |
+| `Parâmetros extras geral` / `Parâmetros ausentes geral` | Comparações agregadas de parâmetros. |
+| `Não coletado sem justificativa` | Registros marcados como amostrados no checklist para os quais o processamento não localizou resultados correspondentes. |
+| `Compilado EDDs` | Resultados EDD reunidos pelo script. |
 | `Plano de amostragem` | PA normalizado usado na comparação. |
-| `Check list` | Checklists consolidados usados na comparação. |
+| `Check list` | Dados de checklist consolidados. |
 
-Algumas abas são deduplicadas antes da gravação. O script colore certas abas de vermelho e, ao final, abre a pasta de trabalho atual no navegador/gerenciador padrão; ele não abre automaticamente o Excel final pelo nome.
+O script pode incluir outras abas de apoio, como diferenças de nomes e pontos em nível geral. Consulte o conteúdo do arquivo gerado e valide amostras representativas contra as fontes originais.
 
-## Como interpretar “ausente” e “extra”
+- **Ausente** não identifica a causa: pode indicar coleta não realizada, resultado ainda não exportado, incompatibilidade de identificador ou grafia diferente.
+- **Extra** significa que o dado foi encontrado na fonte comparada, mas não no recorte do PA considerado.
+- Um ponto presente no EQuIS não implica que todos os parâmetros previstos tenham resultado correspondente.
+- As comparações dependem de nomes de pontos, sites e parâmetros consistentes; normalizações existentes cobrem apenas casos específicos.
 
-- **Ausente**: previsto no plano, mas não encontrado na fonte de resultados consultada. Pode ser coleta não realizada, atraso/incompletude do EDD, ou divergência de identificador/nome.
-- **Extra**: encontrado no EDD, mas não localizado no plano usado pelo script.
-- **Sem justificativa**: o script não encontrou uma justificativa de checklist associada para aquele caso. A equipe deve confirmar o contexto operacional antes de concluir que há uma falha.
+## Execução
 
-Essas categorias são sinalizações para revisão, não conclusões automáticas sobre a causa.
+Na raiz do repositório, com `.env` configurado:
 
-Também é importante separar **“ponto ausente”** de **“análise ausente”**:
+```powershell
+python -m src.main
+```
 
-- ponto ausente: o próprio local não foi encontrado na lista de amostras;
-- análise ausente: o local pode existir, mas falta um parâmetro/resultado associado a uma amostra.
+O programa pausa para confirmação da campanha antes de prosseguir. Responda ao prompt no terminal. Confirme a criação tanto do plano normalizado quanto do relatório configurado; uma execução interrompida não deve ser considerada completa.
 
-## Configuração antes de executar
+## Limitações e cuidados
 
-Confira no `.env`:
+- O formato do checklist e o esquema das exportações EQuIS são específicos ao código atual.
+- Os arquivos de entrada não são obtidos automaticamente do SharePoint nem do laboratório.
+- Ajustes de grafia são explícitos no código; variações não previstas podem aparecer como diferenças.
+- A lista de sites ativos depende de `MAIN_EQUIS_FILES`; atualizar somente um caminho não garante que o restante dos mapas corresponda à campanha.
+- As abas SMP, TST e BCH são lidas, mas não participam diretamente das comparações principais descritas acima.
+- Verifique os resultados manualmente com os responsáveis antes de tomar decisões operacionais.
 
-1. `MAIN_PLAN_FILE`: caminho do plano correto.
-2. `MAIN_EQUIS_DIR` e `MAIN_EQUIS_FILES`: pasta, sites ativos e arquivos EQuIS.
-3. `MAIN_CHECKLIST_DIR` e `MAIN_CHECKLIST_FILES`: pasta e nomes dos checklists.
-4. `MAIN_SITE_RENAME`: mapeamento dos nomes de site.
-5. `MAIN_GROUP_COLUMN`, `MAIN_POINTS_COLUMN`, `MAIN_PARAMETERS_COLUMN`: cabeçalhos do PA.
-6. `MAIN_*_SHEET` e `MAIN_PLAN_SHEET_FILTER`: abas que serão lidas.
-7. `MAIN_PLAN_OUTPUT_FILE` e `MAIN_REPORT_OUTPUT_FILE`: caminhos das saídas.
+## Referência
 
-## Roteiro para conferir se a execução deu certo
-
-1. Veja se o programa conseguiu abrir o plano, os checklists e os arquivos EQuIS sem erro.
-2. Confira se `Plano de Amostragem Braskem BA - 3 campanha.xlsx` foi criado. Ele é uma versão achatada/normalizada do PA.
-3. Confira se `Relação de parâmetros Braskem BA - 2023T1.xlsx` foi criado e se tem as abas indicadas acima.
-4. Escolha alguns pontos conhecidos e compare-os manualmente entre o PA, o checklist e o EDD.
-5. Investigue registros extras/ausentes antes de tratá-los como erros confirmados.
-
-## Limitações/alertas do código atual
-
-- O fluxo depende da campanha e dos layouts configurados. Os caminhos podem ser relativos ou absolutos.
-- A seleção inicial inclui PE-1 e PE-2; outros sites podem ser incluídos em `MAIN_EQUIS_FILES`.
-- O código assume que `Grupos`, `Poços`, `Parâmetros` e os cabeçalhos do checklist existem e têm valores em formatos esperados.
-- Na verificação do formato do checklist há uma referência a `oi`, que não está definida. Se as colunas esperadas não forem encontradas, o script pode terminar com `NameError`.
-- A variável de índice usada para recortar o checklist é reutilizada depois do laço que remove colunas. Isso torna a linha inicial dependente do estado do laço, em vez de ser uma constante explícita.
-- Algumas comparações de ausências gerais usam a tabela `data` completa e não necessariamente o recorte do site corrente. Ao investigar diferenças por site, confira a aba e valide manualmente os registros.
-- O teste que procura “não coletado sem justificativa” usa resultados compilados no nível do ponto/site; não garante que cada amostra ou cada parâmetro esperado esteja completo.
-- As abas SMP, TST e BCH são lidas, mas não são usadas nas etapas mostradas do relatório.
-- A grafia exata dos nomes de pontos e parâmetros influencia os resultados; as correções de texto cobrem apenas casos explicitamente listados no script.
+Consulte o [README principal](../README.md) para instalação, configuração geral, testes e estrutura do repositório. As variáveis de exemplo estão em [`.env.example`](../.env.example).

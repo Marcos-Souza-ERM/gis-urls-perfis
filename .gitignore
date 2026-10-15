@@ -16,3 +16,6 @@ old_runs/*
 *.xlsx
 *.xls
 *.xlsm
+
+# Share the requested profile listing with the repository.
+!inputs/perfis SITE.xlsx

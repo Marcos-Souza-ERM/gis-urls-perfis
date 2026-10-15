@@ -1,139 +1,80 @@
-# `perfis.py` — encontrar o link de perfil para cada registro GIS
+# `perfis.py` — associação de perfis a registros GIS
 
-## Em poucas palavras
+## Finalidade
 
-Imagine que existem duas listas:
+O módulo `src.perfis` associa registros de uma planilha de controle GIS a arquivos listados em uma exportação do BI/SharePoint. Para as correspondências encontradas, constrói uma URL e solicita ao TinyURL um endereço curto.
 
-- uma lista oficial do GIS dizendo quais poços/perfis devem existir;
-- uma lista exportada do BI/SharePoint dizendo quais arquivos estão disponíveis e onde ficam.
+Esta é a versão alternativa/mais antiga do fluxo de perfis. Ela atende BA, AL e Tupy e tem regras de comparação diferentes de `perfis_rs.py`. Não é um encurtador genérico: o vínculo entre o controle GIS e a listagem de arquivos é parte obrigatória do processamento.
 
-Este script tenta descobrir qual arquivo corresponde a cada registro do GIS. Depois cria uma URL curta para o arquivo e grava o resultado em outro Excel.
+## Entradas
 
-É a versão mais antiga e mais simples do fluxo. A versão `perfis_rs.py` tem tratamento adicional para mais configurações de site e para registros sem correspondência dos dois lados.
+O fluxo requer as duas planilhas abaixo dentro de `PERFIS_INPUT_DIR`:
 
-## Entradas esperadas
+1. **Controle GIS**, selecionado por site em `PERFIS_CONTROL_FILES`. Os valores de referência incluem:
+   - BA: `BRASKEM_BA_PerfisConstrutivos_Controle.xlsx`;
+   - AL: `BRASKEM_AL_PerfisConstrutivos_Controle.xlsx`;
+   - Tupy: `TupyMaua_PerfisConstrutivos_Controle.xlsx`.
+2. **Exportação/listagem dos documentos**, configurada em `PERFIS_LINKS_FILE`. O modelo padrão é `perfil {site}.xlsx`; por exemplo, `perfil AL.xlsx`.
 
-O script usa uma pasta definida em `folder` e nela espera:
+A planilha de controle precisa conter colunas equivalentes às configuradas em `PERFIS_FILE_COLUMN`, `PERFIS_LOCATION_COLUMN` e `PERFIS_SITE_COLUMN`. Se o campo de arquivo `PERFIS_FILE_COLUMN` não existir, o script usa o identificador de local como alternativa. Também são utilizadas as colunas configuradas para `GlobalID` e `ObjectID` no relatório de QC.
 
-1. Uma planilha de controle, escolhida pela variável `site`:
-   - BA: `BRASKEM_BA_PerfisConstrutivos_Controle.xlsx`
-   - AL: `BRASKEM_AL_PerfisConstrutivos_Controle.xlsx`
-   - Tupy: `TupyMaua_PerfisConstrutivos_Controle.xlsx`
-2. Uma exportação de arquivos com nome `perfil {site}.xlsx`, por exemplo `perfil AL.xlsx`. Espera colunas como `Name` e `Folder Path`.
+A exportação de arquivos precisa conter as colunas configuradas em `PERFIS_LINK_NAME_COLUMN` e `PERFIS_LINK_PATH_COLUMN` (por padrão, `Name` e `Folder Path`). O nome do arquivo identifica o perfil; o caminho da pasta é usado para compor o endereço de origem.
 
-O valor inicial é `PERFIS_SITE=AL` no [`.env`](../.env). `PERFIS_INPUT_DIR` define a pasta de entrada, `PERFIS_OUTPUT_DIR` a de saída, `PERFIS_CONTROL_FILES` o mapa de arquivos por site e `PERFIS_LINKS_FILE` a lista exportada. Campos `PERFIS_*_COLUMN` configuram os cabeçalhos, convertidos pelo script para os nomes internos.
+## Configuração
 
-A planilha de controle precisa ter campos de identificação do local e site. Se não tiver `File_Name`, o script usa `SYS_LOC_CODE` como substituto. O código também espera colunas como `Site`, `GlobalID`, `ObjectID` e `SYS_LOC_CODE` em trechos posteriores.
+As variáveis são carregadas de `.env` a partir da raiz do repositório:
 
-## Exemplo de como encontra uma correspondência
-
-Imagine que a planilha GIS tenha:
-
-| Site | File_Name |
+| Variável | Uso |
 |---|---|
-| AL | POCO-10 |
+| `PERFIS_SITE` | Site selecionado (`BA`, `AL` ou `Tupy`). |
+| `PERFIS_INPUT_DIR` / `PERFIS_OUTPUT_DIR` | Pastas de entrada e saída. |
+| `PERFIS_CONTROL_FILES` | Mapa JSON dos arquivos de controle por site. |
+| `PERFIS_LINKS_FILE` | Nome/modelo da planilha exportada; aceita `{site}`. |
+| `PERFIS_*_COLUMN` | Cabeçalhos de controle GIS e de exportação. |
+| `PERFIS_QC_FILE` / `PERFIS_OUTPUT_FILE` | Nomes dos relatórios; aceitam `{site}` e `{date}`. |
+| `LINK_RETRY_WAIT_1` / `LINK_RETRY_WAIT_2` | Intervalos, em segundos, entre tentativas ao TinyURL. |
 
-e a exportação de arquivos tenha:
+Os mapas são objetos JSON em uma única linha. Caminhos relativos partem da raiz do projeto. As pastas configuradas precisam existir antes da execução.
 
-| Name | Folder Path |
-|---|---|
-| POCO-10.pdf | .../AL/ |
+## Lógica de associação
 
-O script tira `.pdf` do nome, calcula o site com base na pasta e cria uma chave para cada lado. Se as chaves forem iguais, considera que encontrou o arquivo para aquele registro GIS.
+1. Lê o controle GIS e a exportação do BI.
+2. Renomeia os cabeçalhos configurados para os nomes internos usados pelo script.
+3. Remove espaços e normaliza caracteres selecionados (`|` é substituído por `I`).
+4. Remove os quatro últimos caracteres do nome exportado para obter o identificador do arquivo.
+5. Extrai o site do segmento esperado de `Folder Path` e forma uma chave com site e identificador do local/arquivo.
+6. Faz uma junção do tipo left, mantendo os registros GIS e acrescentando os dados do documento correspondente.
+7. Gera uma planilha QC de registros GIS sem correspondência, constrói as URLs para os documentos associados e tenta encurtá-las.
+8. Grava a planilha final.
 
-Em termos simples, a **chave** é uma etiqueta montada com os campos de site e nome do local. O `merge` procura linhas que tenham a mesma etiqueta, como uma procura/PROCV entre tabelas.
+O caminho exportado deve seguir a estrutura esperada pelo código, que usa o segmento de pasta pai para identificar o site. A chave é baseada em texto: pequenas diferenças de nome podem impedir a correspondência.
 
-## O caminho dos dados no programa
+## Arquivos gerados
 
-1. **Escolhe o site** — a variável `site` decide qual planilha de controle será lida. Atualmente está configurada como `AL`.
-2. **Lê duas tabelas** — `gis` guarda o controle, e `links` guarda a exportação dos arquivos.
-3. **Arruma nomes** — remove espaços ou caracteres específicos para tentar deixar os nomes comparáveis.
-4. **Cria a chave** — combina site e nome do arquivo/local em cada tabela.
-5. **Junta as tabelas** — o `pd.merge(..., 'left', ...)` mantém todos os registros GIS e acrescenta os campos do arquivo quando há correspondência.
-6. **Cria a URL** — combina o caminho da pasta e o nome do arquivo e pede ao TinyURL para gerar um endereço curto.
-7. **Salva o Excel** — inclui o resultado e tenta abrir os arquivos gerados.
+- **QC** (`PERFIS_QC_FILE`): registros GIS sem documento correspondente.
+- **Resultado** (`PERFIS_OUTPUT_FILE`): dados GIS unidos às informações do documento e ao link encurtado, quando disponível.
 
-Alguns nomes para reconhecer no código:
+Os arquivos são gravados em `PERFIS_OUTPUT_DIR`. O script pode tentar abrir os arquivos gerados por meio do aplicativo padrão do sistema. O valor de link no Excel é armazenado como texto HTML (`<a href="...">Disponível</a>`), não como fórmula nativa de hyperlink.
 
-- `gis`: tabela de controle do GIS.
-- `links`: lista de arquivos exportada.
-- `key`: etiqueta usada para relacionar as duas tabelas.
-- `link antigo`: endereço original montado pelo script.
-- `link`: endereço encurtado.
-- `folder`: pasta que o código usa para ler e salvar arquivos.
+## Execução
 
-## Etapas do processamento
+Configure `.env`, confirme os dois arquivos de entrada e execute a partir da raiz:
 
-### 1. Carrega e normaliza os nomes
+```powershell
+python -m src.perfis
+```
 
-O controle do GIS e a exportação de links são carregados com pandas. O script:
+O TinyURL exige conectividade externa. Em caso de falha, o código tenta novamente com os intervalos configurados; uma falha final pode interromper o processamento.
 
-- remove espaços do nome do arquivo `Name`;
-- usa o nome sem os quatro últimos caracteres como `File_Name` (na prática, costuma remover uma extensão como `.pdf`);
-- troca `|` por `I` no nome de arquivo dos dois lados;
-- extrai um rótulo de site do caminho da exportação;
-- remove espaços e hífens nos nomes de site para comparar os dois lados.
+## Limitações e diagnóstico
 
-Essas normalizações são simples e dependem de um padrão consistente de nome de arquivo e estrutura de pastas.
+- O script gera uma lista de controle para registros GIS sem correspondência, mas não produz um relatório equivalente para cada arquivo extra da exportação.
+- A extensão é removida assumindo os quatro últimos caracteres do nome, normalmente `.pdf`.
+- O código combina o caminho e o nome do documento conforme os valores recebidos. Verifique se essa concatenação forma uma URL válida.
+- A extração do site e a normalização dependem do padrão dos arquivos da equipe; não são uma descoberta automática de pastas do SharePoint.
+- Verifique a planilha QC, os campos sem link e os identificadores usados na chave antes de interpretar o resultado.
+- Use `perfis_rs.py` somente se as colunas e regras específicas desse fluxo corresponderem às suas fontes.
 
-### 2. Cria uma chave e faz o cruzamento
+## Referência
 
-As chaves são:
-
-- da exportação: `site + File_Name`;
-- do controle GIS: `Site + File_Name`.
-
-O `merge` é do tipo left: mantém todos os registros do GIS e acrescenta os dados de link quando acha a mesma chave. Pense nele como: “comece pela lista GIS e procure, para cada linha, um arquivo correspondente”. Portanto, a planilha resultante é orientada pelo conteúdo do controle GIS.
-
-### 3. Produz uma lista de controle
-
-Os registros do GIS sem correspondência são selecionados e gravados em:
-
-`Pontos da planilha de controle não encontrados no sharepoint.xlsx`
-
-O script tenta abrir esse arquivo. Esse relatório inclui os campos `GlobalID`, `ObjectID`, `SYS_LOC_CODE`, nome de arquivo e site.
-
-Apesar do nome do relatório mencionar SharePoint, a entrada concreta usada pelo código é a planilha `perfil {site}.xlsx` exportada/listada previamente.
-
-### 4. Cria e encurta os links
-
-Para cada registro que teve correspondência, monta `link antigo` juntando `Folder Path` e `Name`. Em seguida, chama `pyshorteners` com o serviço TinyURL.
-
-Se uma tentativa falhar, o código espera 5 segundos e tenta novamente; se falhar outra vez, espera 10 segundos e tenta uma terceira vez. Se a última tentativa falhar, a exceção não é tratada e a execução para.
-
-Os links encurtados são colocados como texto HTML, por exemplo `<a href="...">Disponível</a>`. `PERFIS_OUTPUT_FILE` e `PERFIS_QC_FILE` definem as saídas dentro de `PERFIS_OUTPUT_DIR`, inicialmente a mesma pasta das entradas. Os intervalos de repetição são configurados em `LINK_RETRY_WAIT_1` e `LINK_RETRY_WAIT_2`.
-
-## O que conferir antes de executar
-
-- Se `site` corresponde ao nome do arquivo de controle e ao arquivo `perfil {site}.xlsx`.
-- Se o caminho `folder` existe e contém todos os arquivos.
-- Se o último diretório relevante de `Folder Path` representa o site esperado. O código usa a penúltima parte do caminho separado por `/`.
-- Se os identificadores e nomes dos arquivos são consistentes entre o controle e a exportação.
-- Se há acesso à internet para o serviço TinyURL.
-- Se o arquivo de saída já existe e pode ser substituído.
-
-Essas opções são preenchidas no grupo `PERFIS_` do `.env`, não mais editando caminhos no Python. Caminhos relativos partem da raiz do projeto. As pastas de saída precisam existir.
-
-## Como saber se a correspondência foi encontrada?
-
-Depois do cruzamento, os arquivos que não foram localizados têm campos como `File_Name_y` vazios (o `_y` é criado porque há colunas de mesmo nome nos dois lados do cruzamento). O script grava esses registros em uma planilha de controle.
-
-Se a planilha final tiver muitas linhas sem `link`, investigue primeiro:
-
-1. se o nome do arquivo bate com o identificador do poço;
-2. se o script extraiu o nome de site correto de `Folder Path`;
-3. se espaços, hífens ou o caractere `|` foram tratados da mesma forma nos dois arquivos.
-
-## Limitações/alertas do código atual
-
-- Não existe no script um relatório equivalente para arquivos da exportação que não tenham correspondência no GIS; ele lista principalmente registros do GIS sem link encontrado.
-- O caminho `link antigo` é montado concatenando caminho e nome exatamente como estão. Se `Folder Path` não terminar com separador, o endereço pode ficar malformado.
-- O código trata qualquer falha na primeira chamada com uma repetição, mas não registra um relatório de falhas por linha. A última falha interrompe o script.
-- A mensagem de “nenhuma correspondência” executa `oi`, uma variável inexistente. Nesse caso, a execução termina com `NameError` em vez de sair com uma mensagem controlada.
-- O conteúdo `<a href="...">Disponível</a>` é uma string HTML dentro do Excel; o código não cria uma fórmula de hyperlink nativa do Excel. Confira no destino se esse formato é interpretado como link clicável.
-- A extensão é removida fixamente pelos quatro últimos caracteres; nomes com extensão diferente ou sem extensão podem ser tratados incorretamente.
-- `math` e algumas variáveis/imports não são usados no fluxo atual.
-
-## Diferença para `perfis_rs.py`
-
-`perfis.py` foi feito para um conjunto menor de opções e só destaca os registros do GIS sem correspondência. [`perfis_rs.md`](./perfis_rs.md) descreve a outra versão, que inclui uma comparação nos dois sentidos e regras para mais sites. Isso não significa que seja seguro trocar de um arquivo para o outro sem conferir as colunas e caminhos: as configurações não são idênticas.
+Consulte o [README principal](../README.md) para requisitos gerais e o arquivo [`.env.example`](../.env.example) para valores de configuração de referência.

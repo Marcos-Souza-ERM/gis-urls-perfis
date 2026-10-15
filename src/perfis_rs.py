@@ -118,6 +118,16 @@ elif site == 'AC': #AC
 
     links['key'] = links['site'] + links['Links_File_Name']
     gis['key'] = gis[site_column] + gis[gis_location_column]
+elif site == 'AL':
+    links['site'] = links['Folder Path'].str.split(
+        env_text('PERFIS_RS_AL_PATH_MARKER'), regex=False
+    ).str[-1].str.split('/').str[0]
+
+    print("Valores da Coluna site do BI:\n")
+    print(links['site'].unique())
+
+    links['key'] = links['site'] + links['Links_File_Name']
+    gis['key'] = gis[site_column] + gis[gis_location_column]
 else:
     links['site'] = links['Folder Path'].str.split('/').str[2]
 

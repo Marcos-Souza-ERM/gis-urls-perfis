@@ -122,6 +122,8 @@ class ScriptTests(unittest.TestCase):
             with self.subTest(site=site):
                 if site == "BA":
                     path, plant = "https://example.com/PE1/", "PE-1"
+                elif site == "AL":
+                    path, plant = "https://example.com/Perfil Construtivo/Plant/", "Plant"
                 elif site == "AC":
                     path, plant = "https://example.com/Custom AC/01. REFMAT/", "REFMAT"
                 elif site == "RS":
@@ -149,6 +151,7 @@ class ScriptTests(unittest.TestCase):
                     "PERFIS_RS_LINK_NAME_COLUMN": "Filename", "PERFIS_RS_LINK_PATH_COLUMN": "Path",
                     "PERFIS_RS_RS_PATH_MARKER": "Custom RS",
                     "PERFIS_RS_AC_PATH_MARKER": "Custom AC/",
+                    "PERFIS_RS_AL_PATH_MARKER": "Perfil Construtivo/",
                     "PERFIS_RS_OUTPUT_FILE": "{site}-out.xlsx", "PERFIS_RS_QC_FILE": "{site}-qc.xlsx",
                 })
                 self.assertEqual(len(calls), 1)

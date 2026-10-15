@@ -1,165 +1,94 @@
-# `perfis_rs.py` — encontrar perfis, conferir diferenças e criar links
+# `perfis_rs.py` — associação de perfis e controle de divergências
 
-## Em poucas palavras
+## Finalidade
 
-Este script também trabalha com duas listas — controle GIS e arquivos disponíveis —, mas faz uma checagem extra: mostra tanto registros do GIS sem arquivo correspondente quanto arquivos sem registro GIS correspondente.
+O módulo `src.perfis_rs` cruza uma planilha de controle GIS com uma exportação/listagem de arquivos de perfis. Ele identifica registros sem correspondência nos dois sentidos e tenta encurtar os endereços dos documentos encontrados.
 
-Depois do controle, tenta gerar links curtos para os perfis encontrados.
+Apesar do sufixo `_rs`, o código inclui regras para BA, AL, AC, Tupy e RS. A regra de site determina como o script interpreta as pastas e cria as chaves de associação; alterar apenas a sigla não garante compatibilidade com uma nova fonte.
 
-Apesar do sufixo `_rs`, o valor inicial é `PERFIS_RS_SITE=BA` no [`.env`](../.env). O arquivo contém ramificações para BA, AL, AC, Tupy e RS, mas cada site depende de nomes de colunas e regras de caminho que precisam ser conferidos.
+## Entradas
 
-## Entradas e saídas
+As duas planilhas devem estar disponíveis em `PERFIS_RS_INPUT_DIR`:
 
-### Entradas configuradas
+1. **Controle GIS**, selecionado pelo mapa `PERFIS_RS_CONTROL_FILES`. Exemplos de nomes configurados:
+   - BA: `BRASKEM_BA_PerfisConstrutivos_Controle.xlsx`;
+   - AL: `BRASKEM_AL_PerfisConstrutivos_Controle.xlsx`;
+   - AC: `ACELEN-BA Poços com perfis construtivos.xlsx`;
+   - Tupy: `TupyMaua_PerfisConstrutivos_Controle.xlsx`;
+   - RS: `BRK-RS-Controle perfis das locations.xlsx`.
+2. **Exportação de arquivos do BI/SharePoint**, selecionada em `PERFIS_RS_LINKS_FILE`. O modelo configurado é `perfil {site}.xlsx`, por exemplo, `perfil BA.xlsx`.
 
-- Pasta de entrada: `PERFIS_RS_INPUT_DIR`, inicialmente `inputs`.
-- Pasta de saída: `PERFIS_RS_OUTPUT_DIR`, inicialmente `outputs`.
-- Planilha de controle:
-  - BA: `BRASKEM_BA_PerfisConstrutivos_Controle.xlsx`
-  - AL: `BRASKEM_AL_PerfisConstrutivos_Controle.xlsx`
-  - AC: `ACELEN-BA Poços com perfis construtivos.xlsx`
-  - Tupy: `TupyMaua_PerfisConstrutivos_Controle.xlsx`
-  - RS: `BRK-RS-Controle perfis das locations.xlsx`; nesse caso, o código lê todas as abas e as concatena.
-- Exportação do BI com nome `perfil {site}.xlsx`, por exemplo `perfil BA.xlsx`.
+Para RS, o script lê todas as abas da planilha de controle e as combina. Nos demais casos, lê a planilha de controle diretamente.
 
-A exportação espera os cabeçalhos definidos em `PERFIS_RS_LINK_NAME_COLUMN` e `PERFIS_RS_LINK_PATH_COLUMN`, inicialmente `Name` e `Folder Path`. O controle usa `PERFIS_RS_LOCATION_COLUMN` e `PERFIS_RS_SITE_COLUMN`, inicialmente `ID Automação` e `Site`. O mapa de nomes de controles é `PERFIS_RS_CONTROL_FILES`; a lista exportada é `PERFIS_RS_LINKS_FILE`.
+### Colunas necessárias
 
-### Saídas
+- No controle GIS: identificador do local (`PERFIS_RS_LOCATION_COLUMN`) e site (`PERFIS_RS_SITE_COLUMN`). RS também requer a coluna de subárea configurada em `PERFIS_RS_SUBAREA_COLUMN`.
+- Na exportação: nome de arquivo (`PERFIS_RS_LINK_NAME_COLUMN`, padrão `Name`) e caminho de pasta (`PERFIS_RS_LINK_PATH_COLUMN`, padrão `Folder Path`).
 
-- Se encontrar diferenças, grava `QC - Encurtamento de links {site}.xlsx` em `outputs`, com abas para itens do controle GIS não encontrados na lista de links e itens da lista de links não encontrados no controle GIS.
-- Grava `Links encurtados {site}-{data}.xlsx` em `outputs`, incluindo as colunas originais do GIS e os dados/links associados.
-- Tenta abrir as planilhas geradas.
+Os cabeçalhos devem corresponder exatamente às colunas do Excel, inclusive espaços, acentos e pontuação. A exportação de links é uma lista preparada previamente; o script não consulta o SharePoint nem baixa os documentos.
 
-O diretório `outputs` precisa existir antes da execução; o script não o cria.
+## Configuração
 
-## Exemplo simples
+O módulo carrega configurações de `.env`:
 
-Imagine esta lista do GIS:
-
-| Site | ID Automação |
+| Variável | Uso |
 |---|---|
-| BA | POCO-10 |
-| BA | POCO-11 |
+| `PERFIS_RS_SITE` | Site selecionado: `BA`, `AL`, `AC`, `Tupy` ou `RS`. |
+| `PERFIS_RS_INPUT_DIR` / `PERFIS_RS_OUTPUT_DIR` | Pastas de entrada e saída. |
+| `PERFIS_RS_CONTROL_FILES` | Mapa JSON de controles por site. |
+| `PERFIS_RS_LINKS_FILE` | Nome/modelo da exportação; aceita `{site}`. |
+| `PERFIS_RS_LOCATION_COLUMN`, `PERFIS_RS_SITE_COLUMN`, `PERFIS_RS_SUBAREA_COLUMN` | Cabeçalhos GIS. A subárea é obrigatória para RS. |
+| `PERFIS_RS_LINK_NAME_COLUMN`, `PERFIS_RS_LINK_PATH_COLUMN` | Cabeçalhos da exportação do BI. |
+| `PERFIS_RS_RS_PATH_MARKER`, `PERFIS_RS_AC_PATH_MARKER`, `PERFIS_RS_AL_PATH_MARKER` | Marcadores de caminho utilizados nas regras correspondentes. |
+| `PERFIS_RS_QC_FILE`, `PERFIS_RS_OUTPUT_FILE` | Nomes dos resultados; aceitam `{site}` e `{date}`. |
+| `LINK_RETRY_WAIT_1`, `LINK_RETRY_WAIT_2` | Esperas, em segundos, antes da segunda e da terceira tentativa ao TinyURL. |
 
-E esta lista exportada de arquivos:
+Mapas devem ser objetos JSON válidos em uma única linha. Caminhos relativos partem da raiz do projeto. As pastas de entrada e saída precisam existir.
 
-| Site extraído da pasta | Nome do arquivo |
-|---|---|
-| BA | POCO-10.pdf |
-| BA | POCO-12.pdf |
+## Regras de associação por site
 
-Depois de retirar a extensão, o script compara etiquetas formadas por site + nome:
+O script normaliza alguns caracteres e forma uma chave a partir do site, do identificador do local/arquivo e, para RS, também da subárea. A extração do site depende da estrutura de `Folder Path`:
 
-- POCO-10 aparece nas duas listas: é uma correspondência; o script tentará gerar o link.
-- POCO-11 aparece apenas no GIS: vai para o relatório de itens do GIS sem arquivo encontrado.
-- POCO-12 aparece apenas na exportação: vai para o relatório de arquivos sem item GIS correspondente.
+- **BA**: usa o segmento de pasta esperado e contém correções de nomes como `PE1`/`PE-1`, `PVC1`/`PVC` e variações de `UA`.
+- **AC**: localiza o trecho após `PERFIS_RS_AC_PATH_MARKER` e aplica correções específicas de nomes de pasta.
+- **AL**: localiza o trecho após `PERFIS_RS_AL_PATH_MARKER` e usa o primeiro segmento subsequente como site.
+- **RS**: procura o trecho posterior a `PERFIS_RS_RS_PATH_MARKER`, divide site e subárea quando aplicável e inclui ambos na chave.
+- **Tupy**: usa a regra padrão de extração por posição do caminho.
 
-O relatório ajuda a localizar diferenças; não decide se POCO-11 deveria ter um arquivo ou se POCO-12 deveria ser cadastrado no GIS.
+Revise esses marcadores e teste a extração com valores reais autorizados antes de processar uma campanha. As chaves são concatenadas sem separador entre alguns componentes; os dados precisam ser consistentes e não ambíguos.
 
-## Nomes para reconhecer no arquivo Python
+## Processamento e saídas
 
-- `gis`: tabela de controle carregada do Excel.
-- `links`: tabela com os nomes e caminhos dos arquivos.
-- `site`: configuração que escolhe qual cliente/local e qual regra de extração será usada.
-- `gis_location_column`: nome da coluna com o identificador do local na tabela GIS.
-- `key`: etiqueta calculada para procurar correspondência nos dois lados.
-- `not_in_sharepoint`: linhas do GIS que não tiveram chave equivalente na lista de arquivos.
-- `not_in_gis_file`: arquivos cuja chave não aparece na tabela GIS.
-- `link antigo`: endereço original montado com caminho + nome do arquivo.
-- `link`: resultado retornado pelo encurtador TinyURL.
+1. Lê o controle GIS e a exportação de documentos.
+2. Normaliza nomes e identificadores e calcula a chave de cada fonte.
+3. Identifica os registros GIS não encontrados na exportação e os arquivos da exportação não encontrados no GIS.
+4. Se houver diferenças, grava `PERFIS_RS_QC_FILE` com duas abas: itens do GIS sem correspondência e itens da exportação sem correspondência.
+5. Associa os arquivos ao controle GIS, forma o endereço original a partir do caminho e do nome e solicita ao TinyURL um link curto.
+6. Grava o resultado em `PERFIS_RS_OUTPUT_FILE`.
 
-## Fluxo detalhado
+O resultado inclui colunas de origem, dados associados e campos de link. O endereço encurtado é representado como texto HTML (`<a href="...">Disponível</a>`), não como hyperlink nativo do Excel. O script pode abrir relatórios/resultados com o aplicativo padrão do sistema.
 
-### 1. Seleciona a planilha de controle
+Se não houver nenhuma URL associada, o script encerra sem gerar o Excel final de links. Se houver divergências, o QC é condicional; portanto, a ausência desse arquivo só indica que não houve divergências se a execução também terminou normalmente.
 
-O bloco baseado em `site` escolhe qual planilha carregar. No caso RS, cada aba do Excel é lida e combinada em uma única tabela. O resto do script trabalha sobre o DataFrame `gis`.
+## Execução
 
-### 2. Prepara nomes dos arquivos e locais
+Configure o site, as colunas, os arquivos e os diretórios em `.env`. Execute a partir da raiz:
 
-Na tabela de links:
+```powershell
+python -m src.perfis_rs
+```
 
-- remove espaços externos do campo `Name`;
-- cria `Links_File_Name` removendo os quatro últimos caracteres do nome;
-- substitui `|` por `I`.
+O encurtamento requer conexão com TinyURL e aprovação organizacional para enviar as URLs ao serviço externo. Uma falha na última tentativa pode interromper o processamento; confirme que a mensagem de conclusão foi exibida e que o arquivo de saída está íntegro.
 
-No controle GIS, faz a mesma substituição no identificador `ID Automação` e remove espaços externos. Também remove espaços externos no campo `Site`.
+## Interpretação e limitações
 
-### 3. Descobre o site a partir do caminho
+- A aba QC sinaliza diferenças entre duas listagens; não confirma que o documento deveria ou não existir.
+- A planilha exportada precisa conter URLs/pastas que possam ser usadas para compor um endereço válido. O código não cria links de compartilhamento nem concede permissões no SharePoint.
+- A remoção da extensão assume que os quatro últimos caracteres do nome do arquivo correspondem à extensão, normalmente `.pdf`.
+- A normalização cobre somente regras explícitas no código; diferenças adicionais de grafia, espaços ou estrutura de diretório podem impedir o cruzamento.
+- Uma falha do TinyURL pode interromper a geração; verifique o resultado antes de utilizá-lo.
+- Valide manualmente uma amostra de correspondências, os valores de site extraídos e os registros do QC.
 
-As regras dependem do valor de `site`:
+## Referência
 
-- **BA**: pega o nome da pasta pai de `Folder Path` e corrige alguns nomes como `PE1` para `PE-1`, `PVC1` para `PVC` e `UA-3` para `UA3`.
-- **AC**: procura a parte do caminho depois de `01. Perfis Construtivos & Sondagens/` e corrige nomes específicos de subpastas.
-- **RS**: tenta obter site e subárea a partir da parte do caminho que segue `Boring Logs - WebGIS`.
-- **AL/Tupy e demais casos**: usa uma posição fixa do caminho separado por `/`.
-
-Os caminhos exportados precisam seguir o padrão esperado pela regra do site. O script imprime os valores de site encontrados para ajudar a verificar o mapeamento.
-
-### 4. Monta chaves de cruzamento
-
-Para BA, AC e o caso padrão, a chave geralmente concatena site e nome do local/arquivo. Para RS, a chave inclui site, subárea e nome do local. A concatenação não adiciona separadores entre os componentes; os padrões dos identificadores precisam evitar ambiguidades.
-
-O objetivo é identificar se cada item do GIS tem arquivo de perfil correspondente e vice-versa.
-
-O código não “adivinha” que dois nomes são iguais. Por exemplo, se de um lado a chave ficou `BAPOCO10` e do outro `BAPO-10`, são textos diferentes e não haverá correspondência. As regras de normalização precisam produzir o mesmo texto em ambos os lados.
-
-### 5. Gera o relatório de QC
-
-O script calcula:
-
-- `not_in_sharepoint`: registros do controle GIS cuja chave não está na lista de links;
-- `not_in_gis_file`: registros da lista de links cuja chave não está no controle GIS.
-
-Se qualquer lista tiver conteúdo, grava as duas em abas do relatório QC. Esse relatório mostra divergências nos dois sentidos; ele não altera nem sincroniza as fontes.
-
-### 6. Associa, normaliza e encurta as URLs
-
-Faz um left merge do controle GIS com os campos `Name`, `Folder Path`, `Links_File_Name` e `key` da lista de links. Para cada correspondência, concatena `Folder Path` e `Name` para montar o link original.
-
-A função `normalize_url` separa os componentes da URL e codifica caracteres especiais do caminho e da query string antes do envio ao TinyURL. O script tenta encurtar cada URL; em caso de falha, espera 5 segundos e tenta de novo, depois espera mais 10 segundos antes da última tentativa. Uma falha final é propagada e pode interromper o restante do processamento.
-
-O texto resultante é escrito como `<a href="URL_CURTA">Disponível</a>`. Isso representa marcação HTML em uma célula; não é uma fórmula nativa do Excel.
-
-## Como adaptar para outro site
-
-Antes de mudar `site`, confira em conjunto:
-
-1. Se o bloco de leitura escolhe o arquivo de controle correto.
-2. Se `gis_location_column` e `site_column` existem na planilha desse site.
-3. Se `perfil {site}.xlsx` está na pasta de entrada e tem as colunas esperadas.
-4. Se a regra de extração do site/subárea corresponde ao caminho real exportado.
-5. Se a chave formada em ambos os lados identifica o mesmo local sem colisões.
-6. Se `outputs` existe e o usuário tem permissão para gravar nela.
-7. Se a rede permite chamadas ao TinyURL.
-
-Preencha as opções no grupo `PERFIS_RS_` do `.env`. Não basta trocar o site: alguns ramos usam colunas diferentes ou regras específicas de caminho. Os marcadores RS/AC também podem ser definidos em `PERFIS_RS_RS_PATH_MARKER` e `PERFIS_RS_AC_PATH_MARKER`. As saídas são configuradas em `PERFIS_RS_QC_FILE` e `PERFIS_RS_OUTPUT_FILE`; os intervalos de repetição, em `LINK_RETRY_WAIT_1` e `LINK_RETRY_WAIT_2`.
-
-## O que a função `normalize_url` faz?
-
-No começo do arquivo há uma função que recebe uma URL e separa partes como protocolo, domínio, caminho e parâmetros. Ela codifica caracteres especiais no caminho e na query para que espaços ou caracteres acentuados não deixem a URL malformada. Depois reúne as partes em uma URL normalizada.
-
-Exemplo conceitual: um espaço no caminho pode precisar ser codificado como `%20`. A função prepara a URL; quem efetivamente gera o endereço curto é a biblioteca `pyshorteners` consultando o serviço TinyURL.
-
-## Limitações/alertas do código atual
-
-- Caminhos relativos partem da raiz do projeto. As entradas e a pasta de saída precisam existir.
-- `PERFIS_RS_SUBAREA_COLUMN` pode ficar vazio nos demais sites, mas é obrigatório para RS. O programa interrompe com uma mensagem de configuração se RS for escolhido sem preencher esse cabeçalho.
-- No ramo RS, a extração assume uma estrutura específica de `Folder Path`; nomes/pastas fora do padrão podem gerar chaves incorretas.
-- As colunas-chave são concatenadas sem delimitadores. Identificadores diferentes podem teoricamente produzir o mesmo texto concatenado.
-- A remoção fixa dos quatro últimos caracteres pressupõe que todos os nomes tenham a mesma extensão de quatro caracteres, como `.pdf`.
-- O arquivo QC só é escrito se houver pelo menos uma divergência; ausência do relatório pode significar que não houve divergências, mas também é importante confirmar que o script concluiu normalmente.
-- O hyperlink final é armazenado como texto HTML, não como hyperlink nativo do Excel. Verifique a forma como a aplicação de destino interpreta esse conteúdo.
-- Se o TinyURL falhar na terceira tentativa, não há tratamento local para continuar os demais registros nem arquivo de falhas parciais.
-- Algumas importações/variáveis e comentários representam tentativas antigas ou não são usados no processamento atual.
-
-## Checklist mental de execução
-
-Antes de confiar na planilha:
-
-1. O `site` escolhido corresponde às entradas corretas?
-2. Os sites que o código imprimiu para GIS e BI fazem sentido?
-3. O relatório QC contém diferenças que precisam ser resolvidas?
-4. Os registros com link têm o arquivo e a URL esperados?
-5. O script chegou à mensagem de processo finalizado?
-
-Se houver erro antes do final, não assuma que o Excel de links está completo; o encurtamento pode ter parado no meio do processamento.
+Veja o [README principal](../README.md) para requisitos, instalação e testes. A lista das opções iniciais está em [`.env.example`](../.env.example).

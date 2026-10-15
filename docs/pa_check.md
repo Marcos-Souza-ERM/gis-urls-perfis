@@ -1,105 +1,72 @@
-# `pa_check.py` — comparar dois Planos de Amostragem
+# `pa_check.py` — comparação entre dois planos de amostragem
 
-## Em poucas palavras
+## Finalidade
 
-Este script responde à pergunta: **“O que está diferente entre o PA da Yael e o PA da Taise?”**
+O módulo `src.pa_check` compara duas planilhas de Plano de Amostragem (PA) e sinaliza diferenças entre combinações de site, ponto e parâmetro. O resultado mantém as linhas de cada plano em abas separadas e acrescenta colunas de controle.
 
-Ele compara as duas planilhas e grava cada versão em uma aba de um novo Excel, com colunas que descrevem diferenças encontradas.
-
-Ele não combina os planos em um único plano aprovado, nem decide qual versão está correta. Seu papel é destacar diferenças para revisão.
+O script não escolhe qual plano é o correto, não mescla as versões em um plano aprovado e não compara resultados de laboratório.
 
 ## Entradas
 
-Os caminhos são definidos pelas variáveis `pa_yael` e `pa_taise`. Cada arquivo deve ser um Excel que contenha pelo menos as colunas:
+São necessários dois arquivos Excel:
 
-- `Site`
-- `Ponto`
-- `Parâmetro`
+- `PA_CHECK_YAEL_FILE`: caminho da primeira versão, identificada no relatório como `PA Yael`.
+- `PA_CHECK_TAISE_FILE`: caminho da segunda versão, identificada no relatório como `PA Taise`.
 
-Configure `PA_CHECK_YAEL_FILE` e `PA_CHECK_TAISE_FILE` no [`.env`](../.env). Os cabeçalhos de entrada podem ser alterados em `PA_CHECK_SITE_COLUMN`, `PA_CHECK_POINT_COLUMN` e `PA_CHECK_PARAMETER_COLUMN`; o script os converte para os nomes internos acima. As planilhas precisam ser fornecidas.
+Ambos os arquivos precisam conter as três colunas correspondentes aos cabeçalhos configurados em:
 
-## Como funciona
+- `PA_CHECK_SITE_COLUMN` (padrão `Site`);
+- `PA_CHECK_POINT_COLUMN` (padrão `Ponto`);
+- `PA_CHECK_PARAMETER_COLUMN` (padrão `Parâmetro`).
 
-1. `pandas.read_excel` carrega cada arquivo em uma tabela: `df_y` para Yael e `df_t` para Taise.
-2. O script cria em cada tabela uma coluna `key` concatenando `Site`, `Ponto` e `Parâmetro`, separados por hífens.
-3. Compara as chaves entre as planilhas:
-   - uma chave presente no PA de Taise e ausente no de Yael recebe uma mensagem em `Parâmetros ausentes`;
-   - uma chave presente no PA de Yael e ausente no de Taise recebe a mensagem inversa.
-4. Faz também comparações separadas de pontos e parâmetros:
-   - `Pontos ausentes`: ponto presente em um arquivo, mas não encontrado em nenhum lugar no outro;
-   - `Parâmetro ausentes geral`: parâmetro que não aparece em nenhum lugar do outro arquivo.
-5. Grava `df_y` e `df_t` nas abas `PA Yael` e `PA Taise` do arquivo `Planos de amostragem.xlsx`.
+Os nomes de cabeçalho são configuráveis, mas os dois arquivos devem usar os valores configurados. As planilhas precisam estar disponíveis localmente ou em um caminho de rede acessível ao usuário.
 
-O caminho de saída é definido em `PA_CHECK_OUTPUT_FILE`. Caminhos relativos são resolvidos a partir da raiz do projeto.
+## Como a comparação funciona
 
-## Exemplo sem termos técnicos
+O script renomeia as colunas de entrada para os nomes internos `Site`, `Ponto` e `Parâmetro` e constrói uma chave textual com os três valores, separados por hífens.
 
-Suponha que o PA de Taise tenha:
+São feitas três verificações:
 
-| Site | Ponto | Parâmetro |
-|---|---|---|
-| Planta A | P-01 | Arsênio |
+1. **Combinação completa**: identifica combinações site + ponto + parâmetro existentes em uma planilha e ausentes na outra.
+2. **Ponto**: identifica valores da coluna `Ponto` que não aparecem em nenhum registro do outro arquivo.
+3. **Parâmetro geral**: identifica valores de `Parâmetro` que não aparecem em nenhum registro do outro arquivo, sem considerar site ou ponto.
 
-e o de Yael tenha:
+Exemplo: se ambos os planos contêm `Site A` e `P-01`, mas um contém `Arsênio` e o outro `Chumbo`, o ponto existe nos dois; as combinações de parâmetros são diferentes. Essa distinção é importante ao interpretar as colunas.
 
-| Site | Ponto | Parâmetro |
-|---|---|---|
-| Planta A | P-01 | Chumbo |
+## Saída
 
-O script monta uma etiqueta única para cada linha:
+`PA_CHECK_OUTPUT_FILE` define o destino do arquivo Excel. Caminhos relativos são resolvidos a partir da raiz do repositório. O resultado contém:
 
-- `Planta A-P-01-Arsênio`
-- `Planta A-P-01-Chumbo`
+- aba `PA Yael`, com os registros da primeira entrada;
+- aba `PA Taise`, com os registros da segunda entrada;
+- chave de comparação e colunas de observação, incluindo `Parâmetros ausentes`, `Pontos ausentes` e `Parâmetro ausentes geral`.
 
-Como as etiquetas não são iguais, a combinação de Arsênio será marcada como existente em um PA e ausente no outro. Mas `P-01` existe nos dois; portanto, ele não é um ponto ausente.
+As descrições nas colunas indicam a origem do registro e a lista em que a combinação não foi encontrada. Uma célula vazia nessas colunas significa que aquela verificação não marcou a linha como diferença.
 
-## O que fazem as principais variáveis?
+## Configuração e execução
 
-- `df_y`: cópia em memória da planilha de Yael.
-- `df_t`: cópia em memória da planilha de Taise.
-- `key`: etiqueta formada com os três campos `Site`, `Ponto` e `Parâmetro`.
-- `Parâmetros ausentes`, `Pontos ausentes` e `Parâmetro ausentes geral`: colunas de observação que o script acrescenta às tabelas antes de salvar.
+1. Configure os caminhos dos dois planos e da saída em `.env`.
+2. Confirme os três cabeçalhos nos dois arquivos.
+3. Execute na raiz do repositório:
 
-O código usa expressões como `~df_y.key.isin(...)`. Em linguagem simples: “se a chave desta linha **não** (`~`) estiver (`isin`) na lista do outro arquivo, marque a linha”.
+   ```powershell
+   python -m src.pa_check
+   ```
 
-## O que as colunas de diferença significam
+O arquivo de saída e sua pasta precisam estar graváveis. Se já existir um arquivo no mesmo caminho, ele poderá ser substituído.
 
-- **`Parâmetros ausentes`** compara a combinação completa site + ponto + parâmetro. Uma diferença nessa coluna quer dizer que aquela combinação não existe no outro PA.
-- **`Pontos ausentes`** compara apenas o texto do ponto, sem considerar site ou parâmetro.
-- **`Parâmetro ausentes geral`** compara apenas o texto do parâmetro, sem considerar site ou ponto.
+## Compatibilidade conhecida
 
-Um registro pode ser marcado como diferente na combinação completa, mesmo que seu ponto e seu parâmetro existam separadamente no outro plano, mas em outra combinação.
+Na versão atual do código, os nomes das abas são passados como argumentos posicionais para `DataFrame.to_excel`. Com o pandas instalado na validação, a API exige esse argumento por nome e a execução termina com `TypeError` ao gravar o arquivo. A suíte automatizada reproduz o problema. Portanto, o formato de saída descrito acima é o resultado pretendido, mas o script precisa de uma correção no código para concluí-lo com essa versão do pandas.
 
-## Exemplo simples
+## Interpretação e limitações
 
-Considere estas linhas:
+- A comparação é literal. Maiúsculas/minúsculas, espaços, acentos, pontuação e grafia podem produzir diferenças.
+- A chave concatena os campos com hífens; padronize os dados de origem e revise manualmente eventuais combinações ambíguas.
+- As comparações de ponto e parâmetro são globais: não consideram site/ponto, respectivamente. Um identificador ou parâmetro presente em outro site ainda conta como existente nessa verificação isolada.
+- Uma diferença indica uma combinação não localizada na outra planilha; não prova que o dado de origem esteja incorreto.
+- O script não remove duplicidades nem normaliza automaticamente os valores das colunas.
 
-| Site | Ponto | Parâmetro |
-|---|---|---|
-| Unidade A | P-01 | Arsênio |
+## Referência
 
-e, no outro arquivo:
-
-| Site | Ponto | Parâmetro |
-|---|---|---|
-| Unidade A | P-01 | Chumbo |
-
-O ponto `P-01` existe nos dois arquivos, então não deve ser marcado como ponto ausente. Porém, a combinação `Unidade A-P-01-Arsênio` não existe no segundo arquivo; ela será sinalizada como diferença de parâmetro/combinação.
-
-## Cuidados antes de usar o resultado
-
-- A comparação é literal. Diferenças de maiúsculas/minúsculas, espaços, acentos, hífens ou grafia podem aparecer como divergências mesmo se as pessoas considerarem os valores equivalentes.
-- A concatenação pressupõe que as colunas usadas sejam texto. Valores vazios ou tipos diferentes podem produzir chaves inesperadas ou erros.
-- A comparação de ponto e parâmetro ignora o site. Se o mesmo identificador for reutilizado em sites diferentes, as colunas de comparação separada podem não refletir uma diferença por site.
-- A coluna `Parâmetros ausentes` é inicializada com texto vazio; as demais observações não preenchidas podem conter valores ausentes. Células em branco não significam que a comparação não ocorreu.
-- O script escreve colunas novas e um arquivo existente no caminho de saída pode ser substituído.
-- `os` é importado, mas não é usado no código atual.
-
-## O que este script não faz
-
-- Não escolhe qual plano é o correto.
-- Não cria um plano combinado.
-- Não compara checklists nem resultados de laboratório.
-- Não padroniza automaticamente grafias equivalentes (como espaços ou diferenças de maiúsculas/minúsculas).
-
-Use o arquivo gerado como uma lista de pontos para revisar com as pessoas responsáveis pelos planos.
+Para visão geral, instalação e testes, consulte o [README principal](../README.md). O modelo das variáveis de configuração está em [`.env.example`](../.env.example).
